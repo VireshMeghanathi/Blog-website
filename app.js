@@ -2,6 +2,7 @@
 
 const express = require("express");
 const bodyParser = require("body-parser");
+const mongoose = require("mongoose")
 const ejs = require("ejs");
 const _ = require("lodash");
 
@@ -16,13 +17,26 @@ app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(express.static("public"));
 
-let posts = [];
+mongoose.connect("mongodb://localhost:27017/blogDB", {useNewUrlParser: true});
+
+const postSchema = {
+  title : String,
+  content : String
+}
+const Post = mongoose.model("Post", postSchema);
+
+
 
 app.get("/", function(req, res){
-  res.render("home", {
-    startingContent: homeStartingContent,
-    posts: posts
-    });
+
+  Post.find()
+    .then((posts)=>{
+      res.render("home", {
+        startingContent: homeStartingContent,
+        posts: posts
+        });
+    })
+    
 });
 
 app.get("/about", function(req, res){
@@ -38,31 +52,40 @@ app.get("/compose", function(req, res){
 });
 
 app.post("/compose", function(req, res){
-  const post = {
+  const post = new Post({
     title: req.body.postTitle,
     content: req.body.postBody
-  };
-
-  posts.push(post);
-
+});
+try{
+  post.save()
   res.redirect("/");
-
+}catch(err){
+  console.log(err);
+}
 });
 
-app.get("/posts/:postName", function(req, res){
-  const requestedTitle = _.lowerCase(req.params.postName);
+app.get("/posts/:postId", function(req, res){
+  const requestedPostId = req.params.postId;
+  // const requestedTitle = _.lowerCase(req.params.postName);
 
-  posts.forEach(function(post){
-    const storedTitle = _.lowerCase(post.title);
-
-    if (storedTitle === requestedTitle) {
-      res.render("post", {
-        title: post.title,
-        content: post.content
-      });
+  Post.findOne({_id: requestedPostId})
+  .then(post => {
+    if (!post) {
+      // Handle case where post is not found
+      res.status(404).send("Post not found");
+      return;
     }
+    
+    res.render("post", {
+      title: post.title,
+      content: post.content
+    });
+  })
+  .catch(err => {
+    // Handle any errors that occurred during the query
+    console.error("Error finding post:", err);
+    res.status(500).send("Internal Server Error");
   });
-
 });
 
 app.listen(3000, function() {
